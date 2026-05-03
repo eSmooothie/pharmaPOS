@@ -20,7 +20,7 @@ frontend/dist/
 *.sqlite
 
 # Installer output
-installer/*.exe
+installer/Output/
 
 # Logs
 logs/
