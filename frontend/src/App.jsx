@@ -20,6 +20,12 @@ const NAV = [
 export default function App() {
   const [appTitle, setAppTitle] = useState("PharmaPOS");
   const [lowStockCount, setLowStockCount] = useState(0);
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const tick = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(tick);
+  }, []);
 
   function refreshTitle() {
     api.get("/business-info").then(r => {
@@ -69,7 +75,11 @@ export default function App() {
       <div className="app-shell">
         <header className="topbar">
           <span className="topbar-title">💊 {appTitle}</span>
-          <span className="topbar-sub">localhost:8000</span>
+          <span className="topbar-sub">
+            {now.toLocaleDateString(undefined, { weekday: "short", year: "numeric", month: "short", day: "numeric" })}
+            {" · "}
+            {now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+          </span>
         </header>
         <div className="body-row">
           <nav className="sidebar">
