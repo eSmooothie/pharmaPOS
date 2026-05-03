@@ -14,6 +14,7 @@ import sys
 import threading
 import time
 import traceback
+import urllib.error
 import urllib.request
 import webbrowser
 from datetime import datetime
@@ -166,8 +167,21 @@ def _check_for_updates(silent: bool = True):
     try:
         url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
         req = urllib.request.Request(url, headers={"User-Agent": "PharmaPOS-Updater"})
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read())
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read())
+        except urllib.error.HTTPError as http_err:
+            if http_err.code == 404:
+                _log.info("No releases published yet on GitHub.")
+                if not silent:
+                    ctypes.windll.user32.MessageBoxW(
+                        0,
+                        f"PharmaPOS is up to date.\n\nVersion: {_current_version()}\n(No releases published yet.)",
+                        "No Updates",
+                        0x40,  # MB_ICONINFORMATION
+                    )
+                return
+            raise
 
         latest_tag = data.get("tag_name", "")
         html_url = data.get("html_url", f"https://github.com/{GITHUB_REPO}/releases/latest")
