@@ -1,0 +1,6 @@
+{
+  "enabled": true,
+  "interval_hours": 24,
+  "retention_count": 14,
+  "backup_dir": "../backups"
+}
