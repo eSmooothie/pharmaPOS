@@ -347,3 +347,108 @@ def sales_csv_export(
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/dashboard")
+def dashboard_summary(
+    range: str = Query("today", description="today | week | month"),
+    db: Session = Depends(get_db),
+):
+    tz_str = _tz_str(db)
+    tz = _get_zone(tz_str)
+    today = date.fromisoformat(_now_local(tz_str))
+
+    if range == "week":
+        start = today - timedelta(days=today.weekday())  # Monday of current week
+    elif range == "month":
+        start = today.replace(day=1)
+    else:
+        start = today
+    end = today
+
+    start_utc, _ = _day_bounds_utc(start.isoformat(), tz_str)
+    _, end_utc = _day_bounds_utc(end.isoformat(), tz_str)
+
+    sales = (
+        db.query(Sale)
+        .filter(
+            Sale.created_at >= start_utc,
+            Sale.created_at <= end_utc,
+            Sale.is_void == False,  # noqa: E712
+        )
+        .all()
+    )
+
+    total_revenue = round(sum(s.total_amount for s in sales), 2)
+    transaction_count = len(sales)
+    avg_transaction = round(total_revenue / transaction_count, 2) if transaction_count else 0.0
+
+    items_sold = 0
+    med_revenue = 0.0
+    groc_revenue = 0.0
+    item_map: dict = {}
+
+    for s in sales:
+        for si in s.items:
+            items_sold += si.quantity
+            if si.medicine_id and si.medicine:
+                med_revenue += si.subtotal
+                key = f"medicine:{si.medicine_id}"
+                label = f"{si.medicine.generic_name} ({si.medicine.brand_name})"
+                itype = "medicine"
+            elif si.grocery_item_id and si.grocery_item:
+                groc_revenue += si.subtotal
+                key = f"grocery:{si.grocery_item_id}"
+                label = si.grocery_item.name
+                itype = "grocery"
+            else:
+                continue
+            if key not in item_map:
+                item_map[key] = {"name": label, "type": itype, "qty": 0, "revenue": 0.0}
+            item_map[key]["qty"] += si.quantity
+            item_map[key]["revenue"] = round(item_map[key]["revenue"] + si.subtotal, 2)
+
+    top_items = sorted(item_map.values(), key=lambda x: x["qty"], reverse=True)[:10]
+
+    daily_map: dict = defaultdict(lambda: {"revenue": 0.0, "count": 0})
+    for s in sales:
+        day = _to_local(s.created_at, tz).strftime("%Y-%m-%d")
+        daily_map[day]["revenue"] = round(daily_map[day]["revenue"] + s.total_amount, 2)
+        daily_map[day]["count"] += 1
+    revenue_by_day = [{"date": d, **v} for d, v in sorted(daily_map.items())]
+
+    disc_map: dict = defaultdict(lambda: {"count": 0, "total_discount": 0.0})
+    for s in sales:
+        if s.discount_amount > 0:
+            name = s.discount_type.name if s.discount_type else "Custom"
+            disc_map[name]["count"] += 1
+            disc_map[name]["total_discount"] = round(disc_map[name]["total_discount"] + s.discount_amount, 2)
+    discount_breakdown = [
+        {"name": n, **v}
+        for n, v in sorted(disc_map.items(), key=lambda x: -x[1]["total_discount"])
+    ]
+
+    med_low = db.query(func.count()).select_from(Medicine).filter(
+        Medicine.is_deleted == False,  # noqa: E712
+        Medicine.stock_qty <= Medicine.reorder_level,
+    ).scalar() or 0
+    groc_low = db.query(func.count()).select_from(GroceryItem).filter(
+        GroceryItem.is_deleted == False,  # noqa: E712
+        GroceryItem.stock_qty <= GroceryItem.reorder_level,
+    ).scalar() or 0
+
+    return {
+        "range": range,
+        "start_date": start.isoformat(),
+        "end_date": end.isoformat(),
+        "total_revenue": total_revenue,
+        "transaction_count": transaction_count,
+        "items_sold": items_sold,
+        "avg_transaction": avg_transaction,
+        "medicine_revenue": round(med_revenue, 2),
+        "grocery_revenue": round(groc_revenue, 2),
+        "revenue_by_day": revenue_by_day,
+        "top_items": top_items,
+        "discount_breakdown": discount_breakdown,
+        "low_stock_count": med_low + groc_low,
+    }

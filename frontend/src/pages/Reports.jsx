@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import api from "../api";
 import { getTimezone } from "../utils/date";
+import Dashboard from "./Dashboard";
 
 // en-CA locale produces YYYY-MM-DD, the format HTML date inputs require.
 function today() {
@@ -206,7 +207,7 @@ function OverallReport() {
 
 // ── Reports page ──────────────────────────────────────────────────────────────
 export default function Reports() {
-  const [tab, setTab] = useState("overall");
+  const [tab, setTab] = useState("dashboard");
 
   // Daily
   const [date, setDate] = useState(today);
@@ -264,11 +265,15 @@ export default function Reports() {
 
       {/* Tab bar */}
       <div style={{ display: "flex", gap: 4, borderBottom: "1px solid #e2e8f0", marginBottom: 20 }}>
+        <button style={tabStyle("dashboard")} onClick={() => setTab("dashboard")}>Dashboard</button>
         <button style={tabStyle("overall")}   onClick={() => setTab("overall")}>Overall</button>
         <button style={tabStyle("daily")}     onClick={() => setTab("daily")}>Daily Summary</button>
         <button style={tabStyle("expiring")}  onClick={() => setTab("expiring")}>Expiring Batches</button>
         <button style={tabStyle("inventory")} onClick={() => setTab("inventory")}>Inventory Snapshot</button>
       </div>
+
+      {/* ── Dashboard ── */}
+      {tab === "dashboard" && <Dashboard />}
 
       {/* ── Overall ── */}
       {tab === "overall" && <OverallReport />}
